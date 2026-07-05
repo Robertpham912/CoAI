@@ -14,9 +14,18 @@ const saveSettingsBtn = document.getElementById("saveSettingsBtn");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 const offlineBanner = document.getElementById("offlineBanner");
 
+const multiAgentToggle = document.getElementById("multiAgentToggle");
+const attachBtn = document.getElementById("attachBtn");
+const fileInput = document.getElementById("fileInput");
+const attachPreview = document.getElementById("attachPreview");
+const vaultPassInput = document.getElementById("vaultPassInput");
+const unlockVaultBtn = document.getElementById("unlockVaultBtn");
+const vaultStatus = document.getElementById("vaultStatus");
+
 const STORAGE_KEYS = { apiKey: "coai_api_key", model: "coai_model", history: "coai_history" };
 
 const registry = new ToolRegistry(EXAMPLE_TOOLS);
+let pendingFilePart = null; // part multimodal đang chờ gửi kèm tin nhắn tiếp theo
 
 let history = loadHistory();
 let client = new GeminiClient({
@@ -26,7 +35,44 @@ let client = new GeminiClient({
 
 const SYSTEM_INSTRUCTION =
   "Bạn là Coai, một trợ lý agentic OS trên iPhone. Trả lời ngắn gọn, tiếng Việt, thân thiện. " +
-  "Dùng tool khi cần dữ liệu thực tế (giờ, pin, đặt nhắc nhở) thay vì đoán.";
+  "Dùng tool khi cần dữ liệu thực tế (giờ, pin, vị trí, đặt nhắc nhở, tra cứu bộ nhớ đã lưu) thay vì đoán.";
+
+// ---------- Vault tools (Phase 2): đăng ký động vì cần API key để tạo embedding ----------
+
+function registerVaultTools() {
+  registry.register({
+    name: "save_memory",
+    description: "Lưu một thông tin quan trọng vào bộ nhớ dài hạn (Vault) để tra cứu lại sau này.",
+    parameters: {
+      type: "object",
+      properties: { text: { type: "string", description: "Nội dung cần ghi nhớ." } },
+      required: ["text"]
+    },
+    execute: async (args) => {
+      if (!Vault.isUnlocked()) return { error: "Vault đang khóa. Mở ⚙ Cài đặt để nhập mật khẩu Vault." };
+      const embedding = await embedText(args.text, client.apiKey);
+      const id = await Vault.addMemory({ text: args.text, embedding });
+      return { saved: true, id };
+    }
+  });
+
+  registry.register({
+    name: "search_memory",
+    description: "Tìm trong bộ nhớ dài hạn (Vault) những thông tin liên quan tới một chủ đề.",
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string", description: "Chủ đề cần tìm." } },
+      required: ["query"]
+    },
+    execute: async (args) => {
+      if (!Vault.isUnlocked()) return { error: "Vault đang khóa. Mở ⚙ Cài đặt để nhập mật khẩu Vault." };
+      const queryEmbedding = await embedText(args.query, client.apiKey);
+      const results = await Vault.search(queryEmbedding, 5);
+      return { results: results.map((r) => ({ text: r.text, score: r.score.toFixed(3) })) };
+    }
+  });
+}
+registerVaultTools();
 
 // ---------- Render ----------
 
@@ -82,11 +128,21 @@ function replayHistoryToUI() {
 // ---------- Send flow ----------
 
 async function sendUserMessage(text) {
-  if (!text.trim()) return;
+  if (!text.trim() && !pendingFilePart) return;
 
-  renderMessage("user", text);
-  history.push({ role: "user", parts: [{ text }] });
+  renderMessage("user", text || "(đã gửi kèm file)");
+
+  const userParts = [];
+  if (text) userParts.push({ text });
+  if (pendingFilePart) {
+    userParts.push(pendingFilePart.part);
+    renderToolTrace(pendingFilePart.previewLabel);
+  }
+  history.push({ role: "user", parts: userParts });
   saveHistory();
+
+  pendingFilePart = null;
+  attachPreview.textContent = "";
 
   textInput.value = "";
   setThinking(true);
@@ -96,21 +152,32 @@ async function sendUserMessage(text) {
       throw new Error("OFFLINE_FALLBACK");
     }
 
-    await runAgentTurn({
-      client,
-      registry,
-      history,
-      systemInstruction: SYSTEM_INSTRUCTION,
-      onEvent: (event) => {
-        if (event.type === "tool_call") {
-          renderToolTrace(`🔧 gọi tool: ${event.name}(${JSON.stringify(event.args || {})})`);
-        } else if (event.type === "tool_result") {
-          renderToolTrace(`✅ kết quả: ${JSON.stringify(event.result)}`);
-        } else if (event.type === "final_text") {
-          renderMessage("agent", event.text);
+    if (multiAgentToggle.checked) {
+      // Multi-Agent Simulation (Phase 5): không dùng tool loop, chạy 3 vai tuần tự.
+      const finalAnswer = await runMultiAgentSimulation({
+        client,
+        question: text,
+        onEvent: (event) => renderToolTrace(`🧑‍💻 [${event.label}]: ${event.text}`)
+      });
+      renderMessage("agent", finalAnswer);
+      history.push({ role: "model", parts: [{ text: finalAnswer }] });
+    } else {
+      await runAgentTurn({
+        client,
+        registry,
+        history,
+        systemInstruction: SYSTEM_INSTRUCTION,
+        onEvent: (event) => {
+          if (event.type === "tool_call") {
+            renderToolTrace(`🔧 gọi tool: ${event.name}(${JSON.stringify(event.args || {})})`);
+          } else if (event.type === "tool_result") {
+            renderToolTrace(`✅ kết quả: ${JSON.stringify(event.result)}`);
+          } else if (event.type === "final_text") {
+            renderMessage("agent", event.text);
+          }
         }
-      }
-    });
+      });
+    }
 
     saveHistory();
   } catch (err) {
@@ -162,6 +229,32 @@ clearHistoryBtn.addEventListener("click", () => {
   chatEl.appendChild(emptyState);
   emptyState.style.display = "block";
   modalBackdrop.classList.remove("open");
+});
+
+// ---------- Multimodal file attach (Phase 4) ----------
+
+attachBtn.addEventListener("click", () => fileInput.click());
+
+fileInput.addEventListener("change", async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  const { part, previewLabel } = await MultimodalPipeline.fileToGeminiPart(file);
+  attachPreview.textContent = previewLabel;
+  pendingFilePart = part ? { part, previewLabel } : null;
+  fileInput.value = ""; // cho phép chọn lại cùng 1 file lần sau
+});
+
+// ---------- Vault unlock (Phase 2) ----------
+
+unlockVaultBtn.addEventListener("click", () => {
+  const pass = vaultPassInput.value;
+  if (!pass) {
+    vaultStatus.textContent = "Vault: cần nhập mật khẩu trước.";
+    return;
+  }
+  Vault.unlock(pass);
+  vaultStatus.textContent = "Vault: đã mở khóa ✅ (chỉ trong phiên này)";
 });
 
 // ---------- Voice input (Web Speech API — nền tảng cho "Voice Live" sau này) ----------

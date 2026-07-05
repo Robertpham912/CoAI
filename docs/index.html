@@ -33,7 +33,17 @@
       </div>
     </main>
 
+    <div class="mode-bar">
+      <label class="mode-toggle">
+        <input type="checkbox" id="multiAgentToggle">
+        <span>🧑‍💻 Multi-Agent (Dev → Tester → PM)</span>
+      </label>
+      <span class="attach-preview" id="attachPreview"></span>
+    </div>
+
     <form class="composer" id="composer">
+      <button type="button" class="attach-btn" id="attachBtn" aria-label="Đính kèm file">📎</button>
+      <input type="file" id="fileInput" hidden accept="image/*,application/pdf,.txt,.md,.js,.py,.cpp,.c,.h,.java,.json,.csv,.html,.css,.swift">
       <button type="button" class="mic-btn" id="micBtn" aria-label="Ghi âm">
         <span class="mic-dot"></span>
       </button>
@@ -57,6 +67,12 @@
       <input type="text" id="modelInput" placeholder="gemini-2.0-flash">
       <p class="field-hint">Kiểm tra tên model chính xác trên Google AI Studio trước khi đổi.</p>
 
+      <label class="field-label" for="vaultPassInput">Mật khẩu Vault (Local Data Vault)</label>
+      <input type="password" id="vaultPassInput" placeholder="Đặt/nhập mật khẩu để mã hóa bộ nhớ dài hạn">
+      <p class="field-hint">Dùng để mã hóa bộ nhớ dài hạn (Vault) trên chính máy này. <strong>Quên mật khẩu = mất dữ liệu Vault vĩnh viễn</strong> (đúng tinh thần Zero-Knowledge).</p>
+      <button type="button" class="btn-secondary" id="unlockVaultBtn" style="width:100%;margin-top:8px;">Mở khóa Vault</button>
+      <p class="field-hint" id="vaultStatus">Vault: đang khóa</p>
+
       <div class="modal-actions">
         <button type="button" class="btn-secondary" id="clearHistoryBtn">Xóa lịch sử chat</button>
         <button type="button" class="btn-primary" id="saveSettingsBtn">Lưu</button>
@@ -66,6 +82,12 @@
 
   <div class="offline-banner" id="offlineBanner">Đang ngoại tuyến — Coai sẽ dùng phản hồi dự phòng cục bộ.</div>
 
+  <script src="js/hal/hal-interface.js"></script>
+  <script src="js/vault/crypto.js"></script>
+  <script src="js/vault/vault-db.js"></script>
+  <script src="js/vault/embeddings.js"></script>
+  <script src="js/multimodal/file-pipeline.js"></script>
+  <script src="js/multi-agent/agent-simulation.js"></script>
   <script src="js/tools/example-tools.js"></script>
   <script src="js/tool-registry.js"></script>
   <script src="js/gemini-client.js"></script>

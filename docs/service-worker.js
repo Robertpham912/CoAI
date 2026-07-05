@@ -2,7 +2,7 @@
 // Chưa xử lý sync nền thật sự (iOS Safari hạn chế Background Sync API) —
 // đây là nơi để mở rộng ở các phase sau nếu Apple hỗ trợ thêm.
 
-const CACHE_NAME = "coai-shell-v1";
+const CACHE_NAME = "coai-shell-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -11,6 +11,12 @@ const APP_SHELL = [
   "./js/gemini-client.js",
   "./js/tool-registry.js",
   "./js/tools/example-tools.js",
+  "./js/hal/hal-interface.js",
+  "./js/vault/crypto.js",
+  "./js/vault/vault-db.js",
+  "./js/vault/embeddings.js",
+  "./js/multimodal/file-pipeline.js",
+  "./js/multi-agent/agent-simulation.js",
   "./manifest.json"
 ];
 

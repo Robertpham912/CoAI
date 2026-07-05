@@ -30,24 +30,40 @@ Cậu đã có repo `CoAI` trên GitHub rồi, nên làm luôn trên đó:
 2. Tạo key mới (miễn phí, có giới hạn quota).
 3. Mở app Coai → bấm ⚙ (góc trên phải) → dán key vào ô "Gemini API Key" → Lưu.
 
-## Cấu trúc code (map với blueprint)
+## Cấu trúc code (map với blueprint — đã đủ khung sườn Phase 1-5)
 
 | File | Vai trò trong blueprint |
 |---|---|
-| `js/gemini-client.js` | Gọi Gemini API + vòng lặp Function Calling (`runAgentTurn`) — chính là "Dynamic Intent Router" bản tối giản |
-| `js/tool-registry.js` | Đăng ký/thực thi tool, có guardrail khi tool lỗi — nền cho "Self-Healing & Guardrails" |
-| `js/tools/example-tools.js` | 3 tool mẫu: giờ hiện tại, pin thiết bị, đặt nhắc nhở — chỗ để thêm "BYO-API Integration" sau này |
-| `service-worker.js` | Cache app shell — bước đầu của "Local Fallback" khi mất mạng |
-| `js/app.js` | UI, lưu lịch sử vào localStorage — bản tối giản của "Dynamic Context Cache" |
-| Web Speech API trong `app.js` | Điểm khởi đầu cho "Voice Live" (chưa phải audio-to-audio streaming thật) |
+| `js/gemini-client.js` | Gọi Gemini API + vòng lặp Function Calling (`runAgentTurn`) — "Dynamic Intent Router" |
+| `js/tool-registry.js` | Đăng ký/thực thi tool, guardrail khi lỗi — "Self-Healing & Guardrails" |
+| `js/tools/example-tools.js` | Tool mẫu: giờ, pin, rung, mạng, vị trí, nhắc nhở — chỗ thêm "BYO-API Integration" |
+| `js/vault/crypto.js` + `vault-db.js` | Mã hóa AES-GCM + IndexedDB — "Local Data Vault" (Phase 2) |
+| `js/vault/embeddings.js` | Sinh vector embedding qua Gemini — phục vụ tìm kiếm ngữ nghĩa trong Vault |
+| `js/hal/hal-interface.js` | Hardware Abstraction Layer — rung, vị trí, mạng, notification, stub IoT (Phase 3) |
+| `js/multimodal/file-pipeline.js` | Đọc ảnh/PDF/code/txt, chuyển thành part gửi Gemini (Phase 4) |
+| `js/multi-agent/agent-simulation.js` | Dev → Tester → PM phản biện tuần tự (Phase 5) |
+| `service-worker.js` | Cache app shell — bước đầu "Local Fallback" |
+| Web Speech API trong `app.js` | Điểm khởi đầu "Voice Live" (chưa phải audio-to-audio streaming thật) |
+
+## Cách dùng tính năng mới
+
+- **Multi-Agent**: bật toggle "🧑‍💻 Multi-Agent" phía trên ô nhập, gõ câu hỏi/bài toán → thấy lần lượt Dev, Tester, PM phản hồi.
+- **Đính kèm file**: bấm 📎, chọn ảnh/PDF/code/txt → gõ thêm câu hỏi (hoặc để trống) → Gửi.
+- **Vault (bộ nhớ dài hạn)**: mở ⚙ Cài đặt → đặt mật khẩu Vault → "Mở khóa Vault". Sau đó Coai có thể tự dùng tool `save_memory`/`search_memory` khi trò chuyện. **Vault tự khóa lại mỗi khi tải lại trang** — cần mở khóa lại mỗi phiên (đây là chủ đích, không phải bug).
 
 ## Giới hạn hiện tại (thành thật với cậu)
 
-- **Không mã hóa Zero-Knowledge thật** — API key và lịch sử chat đang nằm ở `localStorage`, ai đụng được máy/trình duyệt là đọc được. Đủ dùng để test, KHÔNG dùng cho dữ liệu nhạy cảm thật.
-- **Không có Background Sync thật khi app đóng** — iOS Safari giới hạn PWA chạy nền rất chặt, service worker chỉ giúp cache/offline chứ chưa "thức dậy" định kỳ như blueprint mô tả.
-- **Không điều khiển được phần cứng** (Hardware Control Gateway, Haptic pattern riêng) — web không có quyền truy cập sâu vào phần cứng iPhone như app native.
-- Muốn có 3 thứ trên đầy đủ → bắt buộc phải quay lại app native (Swift/Xcode) ở giai đoạn sau, khi cậu có Mac.
+- **Vault mã hóa thật (AES-GCM) nhưng API key/lịch sử chat thường vẫn ở `localStorage` chưa mã hóa** — ai đụng được máy/trình duyệt vẫn đọc được 2 thứ đó. Đủ dùng để test, KHÔNG dùng cho dữ liệu nhạy cảm thật.
+- **Không có Background Sync thật khi app đóng** — iOS Safari giới hạn PWA chạy nền rất chặt.
+- **HAL chỉ làm được những gì Safari cho phép** — rung/vị trí/mạng/notification có thật, nhưng IoT Gateway (Bluetooth/HomeKit) chỉ là stub trả về "chưa hỗ trợ".
+- **Multi-Agent chạy tuần tự, không song song thật** — vẫn tốn 3 lần gọi API cho 1 câu hỏi.
+- Muốn có bản đầy đủ (Haptic pattern riêng, HAL sâu, background service thật) → cần app native (Swift/Xcode) — đúng hướng cậu định làm khi có Mac.
 
-## Tiếp theo
+## Tiếp theo: port sang Xcode
 
-Khi cậu sẵn sàng, Phase 2 (Vector DB cho bộ nhớ dài hạn + mã hóa) có thể làm bằng IndexedDB + Web Crypto API — vẫn chạy được trong bản PWA này, không cần Xcode.
+Khi cậu ngồi vào Mac, mỗi module JS ở trên có thể map 1-1 sang Swift:
+- `gemini-client.js` → `URLSession` + Codable (đã có bản Swift nháp ở phần đầu hội thoại)
+- `vault/*` → `CryptoKit` + Core Data/SQLite
+- `hal-interface.js` → `CoreHaptics`, `CoreLocation`, `Network`, `UNUserNotificationCenter`, `CoreBluetooth`
+- `multimodal/file-pipeline.js` → `PhotosUI`, `PDFKit`, `UIDocumentPickerViewController`
+- `multi-agent/agent-simulation.js` → logic giữ nguyên, chỉ đổi cách gọi API

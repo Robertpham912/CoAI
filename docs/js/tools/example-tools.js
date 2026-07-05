@@ -30,6 +30,39 @@ const EXAMPLE_TOOLS = [
   },
 
   {
+    name: "vibrate_device",
+    description: "Làm rung thiết bị theo một pattern để báo hiệu (haptic feedback).",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern_ms: {
+          type: "string",
+          description: "Danh sách thời gian bật/tắt (ms) cách nhau bởi dấu phẩy, ví dụ '100,50,100'."
+        }
+      },
+      required: []
+    },
+    execute: async (args) => {
+      const pattern = (args.pattern_ms || "100").split(",").map(Number);
+      return HAL.vibrate(pattern);
+    }
+  },
+
+  {
+    name: "get_network_status",
+    description: "Kiểm tra thiết bị có đang online không và loại kết nối mạng.",
+    parameters: { type: "object", properties: {}, required: [] },
+    execute: async () => HAL.getNetworkStatus()
+  },
+
+  {
+    name: "get_current_location",
+    description: "Lấy vị trí GPS hiện tại của thiết bị (cần người dùng cấp quyền).",
+    parameters: { type: "object", properties: {}, required: [] },
+    execute: async () => HAL.getLocation()
+  },
+
+  {
     name: "set_reminder",
     description: "Đặt một lời nhắc cục bộ (hiển thị notification) sau một số phút nhất định.",
     parameters: {
